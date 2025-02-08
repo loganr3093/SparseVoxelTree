@@ -5,6 +5,7 @@
 //  https://dubiousconst282.github.io/2024/10/03/voxel-ray-tracing/
 
 #version 430 core
+
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
 // Output image (binding = 0)
@@ -27,10 +28,12 @@ struct Ray
 
 //*************************************
 // Hit information holder structure
+// - Hit: True if hit
 // - Color: Hit color
 //
 struct HitInfo
 {
+    bool Hit;
     vec3 Color;
 };
 
@@ -68,23 +71,62 @@ struct SparseVoxelTree
 // Function Declarations
 //*****************************************************************************
 
-// Standard slab method for AABB intersection.
-// Returns true if the ray (rayOrigin, rayDir) intersects the AABB defined by (boxMin, boxMax).
+// Node Utility Functions
+
+//*************************************
+// IsLeaf
+// - node: Node to test
+// - Returns: True if the node is a leaf
+//
+bool IsLeaf(in Node node);
+
+//*************************************
+// ChildPtr
+// - node: Node to get child pointer from
+// - Returns: Child pointer
+//
+uint ChildPtr(in Node node);
+
+//*************************************
+// ChildMask
+// - node: Node to get child mask from
+// - Returns: Child mask
+//
+uvec2 ChildMask(in Node node);
+
+// Tree Utility Functions
+
+//*************************************
+// RayCast
+// - ray: Ray to cast
+// - tree: Tree to cast against
+// - Returns: Hit information
+//
+HitInfo RayCast(in Ray ray, in SparseVoxelTree tree);
+
+// General Utility Functions
 
 //*************************************
 // IntersectAABB
-// - ray: Ray to test
-// - boxMin: Lower bounds of the AABB
-// - boxMax: Upper bounds of the AABB
-// - tmin: Minimum intersection distance
-// - tmax: Maximum intersection distance
-// Returns: True if the ray intersects the AABB
+// - ray: Ray to test intersection with
+// - AABBMin: Minimum bounds of the AABB
+// - AABBMax: Maximum bounds of the AABB
+// - Returns: tmin and tmax of intersection
 //
-bool IntersectAABB(in Ray ray, in vec3 boxMin, in vec3 boxMax, out float tmin, out float tmax);
+vec2 IntersectAABB(in Ray ray, in vec3 AABBMin, in vec3 AABBMax);
 
+//*************************************
+// GetPrimaryRay
+// - ray: Output primary ray
+//
 void GetPrimaryRay(out Ray ray);
 
-HitInfo RayCast(in Ray ray, in SparseVoxelTree tree);
+//*************************************
+// GetSkyColor
+// - direction: Direction to get sky color for
+// - Returns: Sky color in that direction
+//
+vec3 GetSkyColor(in vec3 direction);
 
 //*****************************************************************************
 // Uniforms
@@ -142,33 +184,104 @@ void main()
     // For now we assume the AABB is in world space.)
     float tmin, tmax;
     // Perform AABB intersection test.
-    bool hit = IntersectAABB(ray, tree.AABBMin, tree.AABBMax, tmin, tmax);
+    vec2 result = IntersectAABB(ray, tree.AABBMin, tree.AABBMax);
 
-    HitInfo hit = RayCast()
+    HitInfo hit = RayCast(ray, tree);
 
-    // Set pixel color: white if hit, black otherwise.
-    vec3 color = hit ? vec3(1.0) : vec3(0.0);
+    vec3 albedo;
+
+    if (hit.Hit)
+    {
+        albedo = hit.Color;
+        return;
+    }
+    else
+    {
+        albedo = GetSkyColor(ray.Direction);
+    }
 
     // Write the pixel color to the output image.
-    imageStore(imgOutput, pixelCoords, vec4(color, 1.0));
+    imageStore(imgOutput, pixelCoords, vec4(albedo, 1.0));
 }
 
 //*****************************************************************************
 // Function Definitions
 //*****************************************************************************
 
-bool IntersectAABB(in Ray ray, in vec3 boxMin, in vec3 boxMax, out float tmin, out float tmax)
+// Node Utility Functions
+
+//*************************************
+// IsLeaf
+// - node: Node to test
+// - Returns: True if the node is a leaf
+//
+bool IsLeaf(in Node node)
 {
-    vec3 invDir = 1.0 / ray.Direction;
-    vec3 t0 = (boxMin - ray.Origin) * invDir;
-    vec3 t1 = (boxMax - ray.Origin) * invDir;
-    vec3 tsmaller = min(t0, t1);
-    vec3 tbigger  = max(t0, t1);
-    tmin = max(max(tsmaller.x, tsmaller.y), tsmaller.z);
-    tmax = min(min(tbigger.x,  tbigger.y),  tbigger.z);
-    return tmax >= max(tmin, 0.0);
+    return (node.PackedData[0] & 1) != 0;
 }
 
+//*************************************
+// ChildPtr
+// - node: Node to get child pointer from
+// - Returns: Child pointer
+//
+uint ChildPtr(in Node node)
+{
+    return node.PackedData[0] >> 1;
+}
+
+//*************************************
+// ChildMask
+// - node: Node to get child mask from
+// - Returns: Child mask
+//
+uvec2 ChildMask(in Node node)
+{
+    return uvec2(node.PackedData[1], node.PackedData[2]);
+}
+
+// Tree Utility Functions
+
+//*************************************
+// RayCast
+// - ray: Ray to cast
+// - tree: Tree to cast against
+// - Returns: Hit information
+//
+HitInfo RayCast(in Ray ray, in SparseVoxelTree tree)
+{
+    return HitInfo(false, vec3(0.0));
+}
+
+// General Utility Functions
+
+//*************************************
+// IntersectAABB
+// - ray: Ray to test intersection with
+// - AABBMin: Minimum bounds of the AABB
+// - AABBMax: Maximum bounds of the AABB
+// - Returns: tmin and tmax of intersection
+//
+vec2 IntersectAABB(in Ray ray, in vec3 AABBMin, in vec3 AABBMax)
+{
+    vec3 invDir = 1.0 / ray.Direction;
+
+    vec3 t0 = (AABBMin - ray.Origin) * invDir;
+    vec3 t1 = (AABBMax - ray.Origin) * invDir;
+
+    vec3 temp = t0;
+    t0 = min(temp, t1), t1 = max(temp, t1);
+
+    float tmin = max(max(t0.x, t0.y), t0.z);
+    float tmax = min(min(t1.x, t1.y), t1.z);
+
+    return vec2(tmin, tmax);
+}
+
+//*************************************
+// GetPrimaryRay
+// - ray: Output primary ray
+//
 void GetPrimaryRay(out Ray ray)
 {
     // Compute the texture coordinates for the current invocation.
@@ -185,7 +298,12 @@ void GetPrimaryRay(out Ray ray)
     ray.Direction = normalize(viewPoint - ray.Origin);
 }
 
-HitInfo RayCast(in Ray ray, in SparseVoxelTree tree)
+//*************************************
+// GetSkyColor
+// - direction: Direction to get sky color for
+// - Returns: Sky color in that direction
+//
+vec3 GetSkyColor(in vec3 direction)
 {
-    // Magic goes here
+    return vec3(0.25, 0.25, 0.4);
 }
