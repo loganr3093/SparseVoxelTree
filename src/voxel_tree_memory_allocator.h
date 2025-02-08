@@ -49,8 +49,8 @@ public:
             std::cout << "Tree " << i << ":\n";
             std::cout << "  NodePoolPtr: " << tree.NodePoolPtr << "\n";
             std::cout << "  LeafDataPtr: " << tree.LeafDataPtr << "\n";
-            std::cout << "  AABBMin: (" << tree.AABBMin.x << ", " << tree.AABBMin.y << ", " << tree.AABBMin.z << ")\n";
-            std::cout << "  AABBMax: (" << tree.AABBMax.x << ", " << tree.AABBMax.y << ", " << tree.AABBMax.z << ")\n";
+            std::cout << "  AABBMin: (" << tree.Bounds.Min.x << ", " << tree.Bounds.Min.y << ", " << tree.Bounds.Min.z << ", " << tree.Bounds.Min.w << ")\n";
+            std::cout << "  AABBMax: (" << tree.Bounds.Max.x << ", " << tree.Bounds.Max.y << ", " << tree.Bounds.Max.z << ", " << tree.Bounds.Max.w << ")\n";
         }
 
         std::cout << "\nGPU Node Pool (" << gpuNodePool.size() << " entries):" << std::endl;
@@ -78,7 +78,7 @@ public:
 
         const auto& gpuTree = gpuTrees[index];
 
-        if (gpuTree.AABBMin != tree.GetAABBMin() || gpuTree.AABBMax != tree.GetAABBMax() || gpuTree.Transform != tree.GetTransform())
+        if (gpuTree.Bounds.Min != glm::vec4(tree.GetAABBMin(), 0) || gpuTree.Bounds.Max != glm::vec4(tree.GetAABBMax(), 0) || gpuTree.Transform != tree.GetTransform())
             return false;
 
         if (gpuTree.NodePoolPtr >= gpuNodePool.size() || gpuTree.LeafDataPtr >= gpuLeafData.size())

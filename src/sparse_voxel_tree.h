@@ -66,22 +66,36 @@ struct GPUSparseVoxelTreeNode
     // PackedData[0]: Combines IsLeaf (1 bit) and ChildPtr (31 bits).
     // PackedData[1]: Lower 32 bits of ChildMask.
     // PackedData[2]: Upper 32 bits of ChildMask.
+    // 12 bytes
     uint32_t PackedData[3];
+};
+
+struct GPUAABB
+{
+    // Min bounds of the AABB
+    // 16 bytes
+    alignas(16) glm::vec4 Min;
+    // Max bounds of the AABB
+    // 16 bytes
+    alignas(16) glm::vec4 Max;
 };
 
 struct GPUSparseVoxelTree
 {
     // Root node of the tree
-    GPUSparseVoxelTreeNode Root;
-    // Offset into the NodePool buffer
-    uint32_t NodePoolPtr;
-    // Offset into the LeafData buffer
-    uint32_t LeafDataPtr;
+    GPUSparseVoxelTreeNode Root; // 12 bytes
 
-    // Lower bounds
-    glm::vec3 AABBMin;
-    // Upper bounds
-    glm::vec3 AABBMax;
+    // Offset into the NodePool buffer
+    alignas(4) uint32_t NodePoolPtr; // 4 bytes
+    // Offset into the LeafData buffer
+    alignas(4) uint32_t LeafDataPtr; // 4 bytes
+
+    // Padding for 16-byte alignment of `bounds`
+    alignas(4) uint32_t _padding[3]; // 12 bytes
+
+    // Axis-aligned bounding box of the tree
+    alignas(16) GPUAABB Bounds; // 32 bytes
+
     // Transform matrix
-    glm::mat4 Transform;
+    alignas(16)  glm::mat4 Transform; // 64 bytes
 };

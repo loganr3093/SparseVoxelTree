@@ -35,8 +35,8 @@ void VoxelTreeMemoryAllocator::PackVoxelTree(const SparseVoxelTree& tree, uint32
     gpuTree.Root = gpuRoot;
 
     // Set AABB and Transform
-    gpuTree.AABBMin = tree.AABBMin;
-    gpuTree.AABBMax = tree.AABBMax;
+    gpuTree.Bounds.Min = glm::vec4(tree.AABBMin, 0);
+    gpuTree.Bounds.Max = glm::vec4(tree.AABBMax, 0);
     gpuTree.Transform = tree.Transform;
 
     // Set NodePool and LeafData pointers

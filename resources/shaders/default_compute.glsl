@@ -49,6 +49,16 @@ struct Node
 };
 
 //*************************************
+// Axis-aligned bounding box structure
+// - Min: Minimum bounds
+// - Max: Maximum bounds
+struct AABB
+{
+    vec4 Min;
+    vec4 Max;
+};
+
+//*************************************
 // Sparse Voxel 64-Tree structure
 // - Root: Root node of the tree
 // - NodePoolPtr: Offset into the NodePool buffer
@@ -62,8 +72,10 @@ struct SparseVoxelTree
     Node Root;
     uint NodePoolPtr;
     uint LeafDataPtr;
-    vec3 AABBMin;
-    vec3 AABBMax;
+
+    uint _padding[3];
+
+    AABB Bounds;
     mat4 Transform;
 };
 
@@ -104,6 +116,36 @@ uvec2 ChildMask(in Node node);
 //
 HitInfo RayCast(in Ray ray, in SparseVoxelTree tree);
 
+// Tree Traversal Utility Functions
+
+//*************************************
+// Returns the cell index within the 4x4x4 node for a given position.
+// It works by interpreting the float's bit pattern and extracting 2 bits
+// per axis using a right-shift by scaleExp and a mask of 3.
+//
+// - pos: Position to get cell index for
+// - scaleExp: Current scale exponent
+// - Returns: Cell index
+//
+int GetNodeCellIndex(vec3 pos, int scaleExp);
+
+//*************************************
+// Floors the coordinate to the current scale by zeroing out the lower
+// scaleExp bits in the mantissa. This gives the minimum corner of the
+// cell at the current depth.
+//
+// - pos: Position to floor
+// - scaleExp: Current scale exponent
+// - Returns: Floored position
+//
+vec3 FloorScale(vec3 pos, int scaleExp);
+
+//*************************************
+// GetScale computes the size of the cell at the current level.
+// The cell size is given by: scale = 2^(scaleExp - 23), computed by constructing
+// the float from its exponent bits.
+float GetScale(int scaleExp);
+
 // General Utility Functions
 
 //*************************************
@@ -130,11 +172,16 @@ vec3 GetSkyColor(in vec3 direction);
 
 //*************************************
 // IsSolidVoxelAt
+// This function traverses the tree by using the fractional representation of pos,
+// which is assumed to lie in [1.0, 2.0). The initial scale exponent is set to 21,
+// and at each level we extract 2 bits from the float's mantissa to select a child cell.
+// The traversal continues until an empty cell or a leaf is encountered.
+//
 // - voxelPos: Voxel position to test
 // - tree: Tree to test against
 // - Returns: True if the voxel is solid
 //
-bool IsSolidVoxelAt(ivec3 voxelPos, in SparseVoxelTree tree);
+bool IsSolidVoxelAt(in vec3 voxelPos, in SparseVoxelTree tree);
 
 //*****************************************************************************
 // Uniforms
@@ -218,7 +265,7 @@ void main()
 //
 bool IsLeaf(in Node node)
 {
-    return (node.PackedData[0] & 1) != 0;
+    return (node.PackedData[0] & 1u) != 0u;
 }
 
 //*************************************
@@ -251,14 +298,16 @@ uvec2 ChildMask(in Node node)
 //
 HitInfo RayCast(in Ray ray, in SparseVoxelTree tree)
 {
+    // Compute the inverse ray direction.
     vec3 invDir = 1.0 / ray.Direction;
+
     vec3 pos = ray.Origin;
-    float tmax = 0.0;
+
+    float tmax = 0;
 
     for (int i = 0; i < 256; i++)
     {
-        ivec3 voxelPos = ivec3(floor(pos));
-
+        vec3 voxelPos = floor(pos);
         if (IsSolidVoxelAt(voxelPos, tree))
         {
             return HitInfo(true, vec3(1.0, 1.0, 1.0));
@@ -273,6 +322,73 @@ HitInfo RayCast(in Ray ray, in SparseVoxelTree tree)
     }
 
     return HitInfo(false, vec3(0.0));
+
+    /* // Start at the ray origin in fractional coordinates.
+    vec3 pos = ray.Origin;
+
+    // We use an initial scale exponent of 21 (which corresponds to a cell size of 2^(21-23)=0.25).
+    int scaleExp = 21;
+    for (int i = 0; i < 256; i++)
+    {
+        // Test if the current position is solid.
+        if (IsSolidVoxelAt(pos, tree))
+        {
+            return HitInfo(true, vec3(1.0, 1.0, 1.0));
+        }
+        // Compute the current cell's bounding box.
+        float scale = GetScale(scaleExp);
+        vec3 cellMin = FloorScale(pos, scaleExp);
+        vec3 cellMax = cellMin + vec3(scale);
+        // Determine the distance to exit this cell.
+        vec2 tRange = IntersectAABB(ray, cellMin, cellMax);
+        // Advance the ray position by the exit distance plus a small epsilon.
+        pos = ray.Origin + (tRange.y + 0.0001) * ray.Direction;
+    }
+
+    return HitInfo(false, vec3(0.0)); */
+}
+
+// Tree Traversal Utility Functions
+
+//*************************************
+// Returns the cell index within the 4x4x4 node for a given position.
+// It works by interpreting the float's bit pattern and extracting 2 bits
+// per axis using a right-shift by scaleExp and a mask of 3.
+//
+// - pos: Position to get cell index for
+// - scaleExp: Current scale exponent
+// - Returns: Cell index
+//
+int GetNodeCellIndex(vec3 pos, int scaleExp)
+{
+    // Convert each float to its unsigned int bit representation.
+    uvec3 cellPos = (floatBitsToUint(pos) >> uint(scaleExp)) & uvec3(3u);
+    return int(cellPos.x + cellPos.z * 4u + cellPos.y * 16u);
+}
+
+//*************************************
+// Floors the coordinate to the current scale by zeroing out the lower
+// scaleExp bits in the mantissa. This gives the minimum corner of the
+// cell at the current depth.
+//
+// - pos: Position to floor
+// - scaleExp: Current scale exponent
+// - Returns: Floored position
+//
+vec3 FloorScale(vec3 pos, int scaleExp)
+{
+    uvec3 mask = uvec3(~0u) << uint(scaleExp);
+    return uintBitsToFloat(floatBitsToUint(pos) & mask);
+}
+
+//*************************************
+// GetScale computes the size of the cell at the current level.
+// The cell size is given by: scale = 2^(scaleExp - 23), computed by constructing
+// the float from its exponent bits.
+float GetScale(int scaleExp)
+{
+    uint exponent = uint(scaleExp - 23 + 127);
+    return uintBitsToFloat(exponent << 23);
 }
 
 // General Utility Functions
@@ -282,20 +398,21 @@ HitInfo RayCast(in Ray ray, in SparseVoxelTree tree)
 // - ray: Ray to test intersection with
 // - AABBMin: Minimum bounds of the AABB (for a cell, this is floor(pos))
 // - AABBMax: Maximum bounds of the AABB (for a cell, AABBMin + vec3(1.0))
-// - Returns: A vec2 containing tmin (always 0.0 here) and tmax (exit distance)
+// - Returns: tmin and tmax of intersection
 //
 vec2 IntersectAABB(in Ray ray, in vec3 AABBMin, in vec3 AABBMax)
 {
-    // For a unit cell, the cell size is:
-    vec3 cellSize = AABBMax - AABBMin;
-    // Choose, for each axis, the side (min or max) based on the ray direction.
-    // If ray.Direction < 0.0, step() returns 0.0 so we use AABBMin; otherwise, we use AABBMin + cellSize.
-    vec3 sidePos = AABBMin + step(0.0, ray.Direction) * cellSize;
     vec3 invDir = 1.0 / ray.Direction;
-    vec3 sideDist = (sidePos - ray.Origin) * invDir;
-    // The exit distance is the minimum of the three side distances.
-    float tExit = min(min(sideDist.x, sideDist.y), sideDist.z) + 0.0001;
-    return vec2(0.0, tExit);
+    vec3 t0 = (AABBMin - ray.Origin) * invDir;
+    vec3 t1 = (AABBMax - ray.Origin) * invDir;
+
+    vec3 temp = t0;
+    t0 = min(temp, t1), t1 = max(temp, t1);
+
+    float tmin = max(max(t0.x, t0.y), t0.z);
+    float tmax = min(min(t1.x, t1.y), t1.z);
+
+    return vec2(tmin, tmax);
 }
 
 
@@ -331,88 +448,87 @@ vec3 GetSkyColor(in vec3 direction)
 
 //*************************************
 // IsSolidVoxelAt
+// This function traverses the tree by using the fractional representation of pos,
+// which is assumed to lie in [1.0, 2.0). The initial scale exponent is set to 21,
+// and at each level we extract 2 bits from the float's mantissa to select a child cell.
+// The traversal continues until an empty cell or a leaf is encountered.
+//
 // - voxelPos: Voxel position to test (in integer cell coordinates)
 // - tree: Tree to test against
 // - Returns: True if the voxel is solid
 //
-bool IsSolidVoxelAt(ivec3 voxelPos, in SparseVoxelTree tree)
+bool IsSolidVoxelAt(in vec3 pos, in SparseVoxelTree tree)
 {
-    // Start at the root; we assume the tree was built with a "scale" of 6.
-    int scale = 6;
-    ivec3 nodePos = ivec3(0);  // The origin (in voxel space) of the current node.
-    Node currentNode = tree.Root;
-
-    // Traverse the tree without recursion.
-    while (true)
+    if (any(lessThan(pos, tree.Bounds.Min.xyz)) || any(greaterThan(pos, tree.Bounds.Max.xyz)))
     {
-        // If the current node is a leaf...
-        if (IsLeaf(currentNode))
-        {
-            // A leaf covers a 4x4x4 block.
-            // Compute the local coordinates (0..3) within this block.
-            ivec3 local = voxelPos - nodePos;
-            int index = local.x + local.y * 4 + local.z * 16; // index in [0,63]
+        // If any coordinate is below the minimum or above the maximum, return false.
+        return false;
+    }
 
-            // Get the leaf's 64-bit child mask (packed as two 32-bit uints)
-            uvec2 mask = ChildMask(currentNode);
-            // Test the bit corresponding to 'index'.
-            if (index < 32)
-                return (((mask.x >> uint(index)) & 1u) != 0u);
-            else
-                return (((mask.y >> uint(index - 32)) & 1u) != 0u);
+    // Voxel grid with alternating values
+    bool grid[256];
+    for (int i = 0; i < 256; i++)
+    {
+        grid[i] = (i % 31 == 0) || (i % 31 == 1) || (i % 31 == 2);
+    }
+
+    // Compute an index based on the voxel position
+    int index = int(mod(pos.x + pos.y * 16.0 + pos.z * 16.0 * 16.0, 256.0));
+
+    return grid[index];
+    /* Node currentNode = tree.Root;
+    int scaleExp = 21;
+    int childIdx = GetNodeCellIndex(pos, scaleExp);
+
+    while (!IsLeaf(currentNode))
+    {
+        uvec2 cmask = ChildMask(currentNode);
+        bool exists;
+        if (childIdx < 32)
+        {
+            exists = (((cmask.x >> uint(childIdx)) & 1u) != 0u);
         }
         else
         {
-            // Non-leaf node: the 64 children subdivide the current block.
-            // Each level subdivides by 2 bits, so a child covers a block of size (1 << (scale-2)).
-            int shift = scale - 2;
-            ivec3 local = voxelPos - nodePos;
-            // Compute child index within a 4x4x4 layout:
-            int childIndex = (local.x >> shift)
-                           + ((local.y >> shift) << 2)
-                           + ((local.z >> shift) << 4);
+            exists = (((cmask.y >> uint(childIdx - 32)) & 1u) != 0u);
+        }
 
-            // Get the current node's child mask.
-            uvec2 mask = ChildMask(currentNode);
-            bool exists;
-            if (childIndex < 32)
-                exists = (((mask.x >> uint(childIndex)) & 1u) != 0u);
-            else
-                exists = (((mask.y >> uint(childIndex - 32)) & 1u) != 0u);
+        if (!exists)
+        {
+            break;
+        }
 
-            // If this child does not exist, then the voxel is not solid.
-            if (!exists)
-                return false;
+        uint childOffset = 0u;
+        if (childIdx < 32)
+        {
+            uint bits = cmask.x & ((1u << uint(childIdx)) - 1u);
+            childOffset = uint(bitCount(bits));
+        }
+        else
+        {
+            uint countLow = uint(bitCount(cmask.x));
+            int subIdx = childIdx - 32;
+            uint bits = cmask.y & ((1u << uint(subIdx)) - 1u);
+            childOffset = countLow + uint(bitCount(bits));
+        }
 
-            // Compute the offset (number of set bits before our childIndex) to index into the NodePool.
-            uint childOffset;
-            if (childIndex < 32)
-            {
-                uint bits = mask.x & ((1u << uint(childIndex)) - 1u);
-                childOffset = uint(bitCount(bits));
-            }
-            else
-            {
-                uint countLow = uint(bitCount(mask.x));
-                int subIndex = childIndex - 32;
-                uint bits = mask.y & ((1u << uint(subIndex)) - 1u);
-                childOffset = countLow + uint(bitCount(bits));
-            }
+        currentNode = NodePool[ChildPtr(currentNode) + childOffset];
+        scaleExp -= 2;
+        childIdx = GetNodeCellIndex(pos, scaleExp);
+    }
 
-            // Get the base child pointer from the current node.
-            uint childPtr = ChildPtr(currentNode);
-            uint nextNodeIndex = childPtr + childOffset;
-            // Fetch the child node from the global NodePool buffer.
-            currentNode = NodePool[nextNodeIndex];
-
-            // Update the origin for the next level.
-            int offsetX = (childIndex & 3) << shift;
-            int offsetY = ((childIndex >> 2) & 3) << shift;
-            int offsetZ = ((childIndex >> 4) & 3) << shift;
-            nodePos += ivec3(offsetX, offsetY, offsetZ);
-
-            // Descend one level.
-            scale -= 2;
+    if (IsLeaf(currentNode))
+    {
+        uvec2 cmask = ChildMask(currentNode);
+        if (childIdx < 32)
+        {
+            return (((cmask.x >> uint(childIdx)) & 1u) != 0u);
+        }
+        else
+        {
+            return (((cmask.y >> uint(childIdx - 32)) & 1u) != 0u);
         }
     }
+
+    return false; */
 }

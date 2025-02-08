@@ -147,6 +147,21 @@ public:
         return cameraToWorldMatrix;
     }
 
+    glm::mat4 GetProjectionMatrix()
+    {
+        return glm::perspective(glm::radians(Fov), Aspect, NearClipPlane, FarClipPlane);
+    }
+
+    glm::mat4 GetInverseProjectionMatrix()
+    {
+        return glm::inverse(GetProjectionMatrix());
+    }
+
+    glm::vec3 GetCameraOrigin()
+    {
+        return Position;
+    }
+
 private:
     // calculates the front vector from the Camera's (updated) Euler Angles
     void updateCameraVectors()

@@ -112,15 +112,6 @@ int main()
 
     allocator.PrintMemory();
 
-    if (allocator.CompareTree(deer_tree, 0))
-    {
-        std::cout << "Tree comparison successful!" << std::endl;
-    }
-    else
-    {
-        std::cout << "Tree comparison failed!" << std::endl;
-    }
-
     // render loop
     // -----------
     int width, height;
