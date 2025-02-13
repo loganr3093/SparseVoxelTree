@@ -102,6 +102,8 @@ int main()
     VoxelTreeMemoryAllocator allocator;
     allocator.Allocate(trees);
 
+    VoxelMap voxelMap = deer_tree.ToVoxelMap();
+
     // Upload data to GPU
     allocator.UploadToGPU();
 
@@ -111,6 +113,27 @@ int main()
     GLuint leafDataBuffer = allocator.GetLeafDataBuffer();
 
     allocator.PrintMemory();
+
+    // **TEMP CODE**: Create and upload the voxel grid data buffer (GridData)
+    // Convert the voxelMap.voxels (vector<uint8_t>) into a vector<uint32_t>
+    std::vector<uint32_t> voxelGridData(voxelMap.voxels.size());
+    for (size_t i = 0; i < voxelMap.voxels.size(); i++)
+    {
+        voxelGridData[i] = static_cast<uint32_t>(voxelMap.voxels[i]);
+    }
+
+
+    std::cout << voxelGridData.size() << std::endl;
+    std::cout << static_cast<float>(voxelMap.size_x) << " " << static_cast<float>(voxelMap.size_y) << " " << static_cast<float>(voxelMap.size_z) << std::endl;
+
+    GLuint gridDataBuffer;
+    glGenBuffers(1, &gridDataBuffer);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, gridDataBuffer);
+    glBufferData(GL_SHADER_STORAGE_BUFFER,
+                 voxelGridData.size() * sizeof(uint32_t),
+                 voxelGridData.data(),
+                 GL_STATIC_DRAW);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
     // render loop
     // -----------
@@ -140,10 +163,13 @@ int main()
         computeShader.setVec3("ViewParams", glm::vec3(planeWidth, planeHeight, camera.NearClipPlane));
         computeShader.setMat4("CamWorldMatrix", camera.GetCameraToWorldMatrix());
 
+        computeShader.setVec3("GridSize", glm::vec3(static_cast<float>(voxelMap.size_x), static_cast<float>(voxelMap.size_y), static_cast<float>(voxelMap.size_z)));
+
         // Bind buffers
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, treeBuffer);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, nodePoolBuffer);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, leafDataBuffer);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, gridDataBuffer);
 
         // Bind texture as image
         texture.bindAsImage(0, 0, GL_FALSE, GL_READ_WRITE, GL_RGBA32F);
@@ -169,6 +195,7 @@ int main()
     }
 
     // Cleanup
+    glDeleteBuffers(1, &gridDataBuffer);
     allocator.FreeGPUResources();
     glfwTerminate();
 

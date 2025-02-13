@@ -114,6 +114,9 @@ layout (location = 1) uniform vec3 ViewParams;
 // Camera world transformation matrix
 layout (location = 2) uniform mat4 CamWorldMatrix;
 
+// TEMPORARY CODE FOR USING GRID
+layout (location = 3) uniform vec3 GridSize;
+
 //*****************************************************************************
 // Buffers
 //*****************************************************************************
@@ -134,6 +137,12 @@ layout(std430, binding = 1) buffer NodePoolBuffer
 layout(std430, binding = 2) buffer LeafDataBuffer
 {
     uint LeafData[];
+};
+
+// TEMPORARY CODE FOR USING GRID
+layout(std430, binding = 3) buffer GridDataBuffer
+{
+    uint GridData[];
 };
 
 //*****************************************************************************
@@ -222,7 +231,7 @@ HitInfo RayCast(in Ray ray, in SparseVoxelTree tree)
     vec3 pos = ray.Origin;
     vec3 dirSign = step(0.0, ray.Direction); // 1 if direction >= 0, else 0
 
-    for (int i = 0; i < 256; i++)
+    for (int i = 0; i < 32768; i++)
     {
         vec3 voxelPos = floor(pos);
         if (IsSolidVoxelAt(voxelPos, tree))
@@ -368,21 +377,22 @@ vec3 GetSkyColor(in vec3 direction)
 //
 bool IsSolidVoxelAt(in vec3 pos, in SparseVoxelTree tree)
 {
-    if (any(lessThan(pos, tree.Bounds.Min.xyz)) || any(greaterThan(pos, tree.Bounds.Max.xyz)))
+    // Convert the floating-point position to integer voxel coordinates.
+    ivec3 voxelCoord = ivec3(floor(pos));
+
+    // Check if the coordinate is within the grid [0, GridSize)
+    if (voxelCoord.x < 0 || voxelCoord.x >= int(GridSize.x / 2) ||
+        voxelCoord.y < 0 || voxelCoord.y >= int(GridSize.y / 2) ||
+        voxelCoord.z < 0 || voxelCoord.z >= int(GridSize.z / 2))
     {
-        // If any coordinate is below the minimum or above the maximum, return false.
         return false;
     }
 
-    // Voxel grid with alternating values
-    bool grid[256];
-    for (int i = 0; i < 256; i++)
-    {
-        grid[i] = (i % 31 == 0) || (i % 31 == 1) || (i % 31 == 2);
-    }
+    // Compute the 1D index assuming x is the fastest-changing index.
+    int index = voxelCoord.x
+              + voxelCoord.y * int(GridSize.x)
+              + voxelCoord.z * int(GridSize.x) * int(GridSize.y);
 
-    // Compute an index based on the voxel position
-    int index = int(mod(pos.x + pos.y * 16.0 + pos.z * 16.0 * 16.0, 256.0));
-
-    return grid[index];
+    // Return true if the grid value is nonzero (i.e. solid).
+    return (GridData[index] != 0u);
 }
