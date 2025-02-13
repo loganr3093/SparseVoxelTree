@@ -94,13 +94,14 @@ HitInfo RayCast(in Ray ray, in SparseVoxelTree tree);
 // Tree Traversal Utility Functions
 int GetNodeCellIndex(vec3 pos, int scaleExp);
 vec3 FloorScale(vec3 pos, int scaleExp);
-float GetScale(int scaleExp);
+uint Popcnt64(uvec2 mask);
 
 // General Utility Functions
 vec2 IntersectAABB(in Ray ray, in vec3 AABBMin, in vec3 AABBMax);
 void GetPrimaryRay(out Ray ray);
 vec3 GetSkyColor(in vec3 direction);
-bool IsSolidVoxelAt(in vec3 voxelPos, in SparseVoxelTree tree);
+float GetScale(int scaleExp);
+bool IsSolidVoxelAt(in vec3 pos, in SparseVoxelTree tree);
 
 //*****************************************************************************
 // Uniforms
@@ -279,10 +280,24 @@ vec3 FloorScale(vec3 pos, int scaleExp)
 // GetScale computes the size of the cell at the current level.
 // The cell size is given by: scale = 2^(scaleExp - 23), computed by constructing
 // the float from its exponent bits.
+//
+// - scaleExp: Current scale exponent
+// - Returns: Cell scale
+//
 float GetScale(int scaleExp)
 {
     uint exponent = uint(scaleExp - 23 + 127);
     return uintBitsToFloat(exponent << 23);
+}
+
+//*************************************
+// Popcnt64
+// - mask: Mask to count bits in
+// - Returns: Number of set bits in the mask
+//
+uint Popcnt64(uvec2 mask)
+{
+    return bitCount(mask.x) + bitCount(mask.y);
 }
 
 // General Utility Functions
