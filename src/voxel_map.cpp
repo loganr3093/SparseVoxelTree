@@ -10,7 +10,8 @@ void PrintVoxelMap(const VoxelMap& voxelMap, const std::string& name)
         return;
     }
 
-    file << "Voxel Map: " << name << " (Size: " << voxelMap.size_x << "x" << voxelMap.size_y << "x" << voxelMap.size_z << ")\n";
+    file << "Voxel Map: " << name << " (Size: " << voxelMap.size_x 
+         << "x" << voxelMap.size_y << "x" << voxelMap.size_z << ")\n";
     for (uint32_t z = 0; z < voxelMap.size_z; ++z)
     {
         file << "Z = " << z << ":\n";
@@ -51,4 +52,29 @@ void CompareVoxelMaps(const VoxelMap& original, const VoxelMap& reconstructed)
     }
 
     std::cout << "Total discrepancies: " << discrepancyCount << "\n";
+}
+
+// Implementation of material getters:
+float VoxelMap::getMetal(uint8_t index) const {
+    if (index < material_map.size())
+        return material_map[index].metal;
+    return 0.0f;
+}
+
+float VoxelMap::getRough(uint8_t index) const {
+    if (index < material_map.size())
+        return material_map[index].rough;
+    return 0.0f;
+}
+
+float VoxelMap::getSpec(uint8_t index) const {
+    if (index < material_map.size())
+        return material_map[index].spec;
+    return 0.0f;
+}
+
+float VoxelMap::getIOR(uint8_t index) const {
+    if (index < material_map.size())
+        return material_map[index].ior;
+    return 0.0f;
 }

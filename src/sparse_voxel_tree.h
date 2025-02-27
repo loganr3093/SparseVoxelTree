@@ -20,6 +20,38 @@ class SparseVoxelTree
 public:
     SparseVoxelTree(const VoxelMap& voxelMap);
 
+    /**
+     * @brief Recursively generates a Sparse Voxel Tree from a given voxel map.
+     *
+     * This function constructs a sparse voxel tree by subdividing the voxel map into a 4x4x4 grid at each level.
+     * The algorithm operates in two main cases:
+     *
+     * 1. Leaf Node Creation (Base Case):
+     *    - When the scale is equal to 2, the function treats the current region as a leaf node, representing a 4x4x4 tile.
+     *    - It first asserts that the starting position is aligned on a 4-voxel grid.
+     *    - It then repacks the voxels within this 4x4x4 region into a temporary array.
+     *    - A bitmask is generated using the helper function PackBits64, where each bit corresponds to a voxel and is set
+     *      if that voxel is non-zero.
+     *    - The LeftPack function is used to "compress" the temporary array by removing entries for which the corresponding
+     *      bit in the bitmask is zero.
+     *    - The non-empty voxel data is then appended to a global container (leafData), and the node is marked as a leaf.
+     *
+     * 2. Internal Node Creation (Recursive Case):
+     *    - For scales greater than 2, the function subdivides the current region into 64 smaller regions (a 4x4x4 grid).
+     *    - It computes the relative position of each child region and calls generateTree recursively with a reduced scale.
+     *    - If a child node contains any non-empty voxel data (indicated by a non-zero ChildMask), the corresponding bit
+     *      in the parent's ChildMask is set.
+     *    - All valid child nodes are collected in a temporary vector and then appended to a global node pool (nodePool).
+     *    - The parent's ChildPtr is updated to reference the starting index of its children in the nodePool.
+     *
+     * Parameters:
+     * - voxelMap: The voxel map containing voxel data and its dimensions.
+     * - scale: The current scale level. When scale == 2, the region is treated as a leaf node (4x4x4 voxel tile).
+     * - pos: The starting 3D position (origin) in the voxel map for the current region.
+     *
+     * Returns:
+     * - A SparseVoxelTreeNode representing the current region in the voxel tree.
+    */
     void GenerateTree(const VoxelMap& voxelMap);
 
     size_t GetTotalVoxels() const;

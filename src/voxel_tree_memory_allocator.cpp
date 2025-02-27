@@ -79,7 +79,7 @@ void VoxelTreeMemoryAllocator::UploadToGPU()
     // Upload Leaf Data
     glGenBuffers(1, &leafDataBuffer);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, leafDataBuffer);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, gpuLeafData.size(), gpuLeafData.data(), GL_STATIC_DRAW);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, gpuLeafData.size() * sizeof(uint32_t), gpuLeafData.data(), GL_STATIC_DRAW);
 
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 }

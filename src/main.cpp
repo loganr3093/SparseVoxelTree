@@ -110,6 +110,25 @@ int main()
     GLuint nodePoolBuffer = allocator.GetNodePoolBuffer();
     GLuint leafDataBuffer = allocator.GetLeafDataBuffer();
 
+    // Palette here
+    GLuint paletteSSBO;
+    std::vector<glm::vec4> palette(255);
+
+    // Initialize your palette with colors
+    for (int i = 0; i < 255; i++) {
+        float r = deer_voxel_map.palette[i].r / 255.0f;
+        float g = deer_voxel_map.palette[i].g / 255.0f;
+        float b = deer_voxel_map.palette[i].b / 255.0f;
+        palette[i] = glm::vec4(r, g, b, 1.0f);
+    }
+
+    // Generate and bind the SSBO
+    glGenBuffers(1, &paletteSSBO);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, paletteSSBO);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, palette.size() * sizeof(glm::vec4), palette.data(), GL_DYNAMIC_DRAW);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, paletteSSBO);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
     allocator.PrintMemory();
 
     // render loop
@@ -144,6 +163,7 @@ int main()
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, treeBuffer);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, nodePoolBuffer);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, leafDataBuffer);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, paletteSSBO);
 
         // Bind texture as image
         texture.bindAsImage(0, 0, GL_FALSE, GL_READ_WRITE, GL_RGBA32F);
@@ -170,6 +190,7 @@ int main()
 
     // Cleanup
     allocator.FreeGPUResources();
+    glDeleteBuffers(1, &paletteSSBO);
     glfwTerminate();
 
     return 0;

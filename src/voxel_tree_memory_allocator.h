@@ -29,13 +29,13 @@ public:
     // Get Data
     const std::vector<GPUSparseVoxelTree> GetTreeBufferData() const { return gpuTrees; }
     const std::vector<GPUSparseVoxelTreeNode> GetNodePoolBufferData() const { return gpuNodePool; }
-    const std::vector<uint8_t> GetLeafDataBufferData() const { return gpuLeafData; }
+    const std::vector<uint32_t> GetLeafDataBufferData() const { return gpuLeafData; }
 
     void PrintStats()
     {
         std::cout << "GPU Sparse Voxel Trees: " << gpuTrees.size() * sizeof(GPUSparseVoxelTree) << std::endl;
         std::cout << "GPU Node Pool: " << gpuNodePool.size() * sizeof(GPUSparseVoxelTreeNode) << std::endl;
-        std::cout << "GPU Leaf Data: " << gpuLeafData.size() * sizeof(uint8_t) << std::endl;
+        std::cout << "GPU Leaf Data: " << gpuLeafData.size() * sizeof(uint32_t) << std::endl;
     }
 
     void PrintMemory() const
@@ -115,7 +115,7 @@ private:
 
     std::vector<GPUSparseVoxelTree> gpuTrees;
     std::vector<GPUSparseVoxelTreeNode> gpuNodePool;
-    std::vector<uint8_t> gpuLeafData;
+    std::vector<uint32_t> gpuLeafData;
 
     void PackVoxelTree(const SparseVoxelTree& tree, uint32_t& nodeOffset, uint32_t& leafOffset);
 };

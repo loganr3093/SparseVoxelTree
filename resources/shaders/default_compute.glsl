@@ -161,6 +161,10 @@ layout(std430, binding = 2) buffer LeafDataBuffer
     uint LeafData[];
 };
 
+layout(std430, binding = 3) buffer PaletteBuffer {
+    vec4 Palette[];
+};
+
 //*****************************************************************************
 // Main
 //*****************************************************************************
@@ -316,7 +320,7 @@ HitInfo RayCast(in Ray ray, in SparseVoxelTree tree)
         if (IsLeaf(node) && IsBitSet(ChildMask(node), cellIndex))
         {
             // Return a white hit.
-            return HitInfo(true, vec3(1.0, 1.0, 1.0));
+            return HitInfo(true, Palette[LeafData[ChildPtr(node) + Popcnt64Below(ChildMask(node), cellIndex)]].rgb);
         }
 
         // --- Advance the ray using a standard voxel DDA step ---
